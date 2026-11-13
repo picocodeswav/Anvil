@@ -8,16 +8,17 @@ Production-grade orchestration for Android 4.0 – 7.1
 import sys
 import json
 import time
+import shutil
 from pathlib import Path
 from typing import Optional
 
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QTextEdit, QLabel, QGroupBox, QComboBox,
-    QProgressBar, QMessageBox, QSplitter, QFrame
+    QProgressBar, QMessageBox, QSplitter, QFrame, QFileDialog
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QPalette, QIcon
+from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QPalette
 
 # Local core
 from core.adb_manager import ADBManager
@@ -227,20 +228,20 @@ class RecoveryBootWorker(QThread):
 class AnvilMainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Anvil")
+        self.setWindowTitle("Anvil Legacy Android Maintenance Utility")
         self.setMinimumSize(960, 680)
         self.resize(1100, 760)
 
-        # Paths
-        self.base_dir = Path(__file__).parent.resolve()
+        # Paths – work both from source and from PyInstaller --onefile
+        if getattr(sys, "frozen", False):
+            # Running as compiled exe: assets live next to the exe (user-writable)
+            self.base_dir = Path(sys.executable).parent.resolve()
+        else:
+            self.base_dir = Path(__file__).parent.resolve()
         self.assets = self.base_dir / "assets"
-
-        # Windows XP style window icon (drop anvil.png or anvil.ico into assets/)
-        for icon_name in ("anvil.ico", "anvil.png", "anvil.jpg"):
-            icon_path = self.assets / icon_name
-            if icon_path.exists():
-                self.setWindowIcon(QIcon(str(icon_path)))
-                break
+        # Ensure asset folders exist so Add Exploits can write into them
+        for sub in ("exploits", "recoveries", "manifests", "drivers"):
+            (self.assets / sub).mkdir(parents=True, exist_ok=True)
 
         # Core engines
         self.adb = ADBManager()
@@ -259,6 +260,9 @@ class AnvilMainWindow(QMainWindow):
         self.watchdog.timeout.connect(self._watchdog_tick)
         self.watchdog.start(1500)
 
+        # Initial asset scan
+        self.refresh_assets_status()
+
         self._log("Anvil ready. Connect a legacy Android device (4.0 – 7.1) and run Pre-Flight.")
 
     def _load_bloat_profiles(self) -> dict:
@@ -276,7 +280,7 @@ class AnvilMainWindow(QMainWindow):
         main_layout.setSpacing(8)
 
         # Header - classic XP title style
-        header = QLabel("Anvil")
+        header = QLabel("Anvil Legacy Android Maintenance Utility")
         header.setFont(QFont("Tahoma", 14, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
         header.setStyleSheet("color: #003399; padding: 4px;")
@@ -293,6 +297,60 @@ class AnvilMainWindow(QMainWindow):
         self.status_label.setFont(QFont("Tahoma", 9, QFont.Bold))
         self.status_label.setStyleSheet("color: #CC0000; padding: 2px 0;")
         main_layout.addWidget(self.status_label)
+
+        # Assets Needed bar + Version selector
+        assets_row = QHBoxLayout()
+        assets_row.setSpacing(8)
+
+        self.assets_label = QLabel("Assets Needed:")
+        self.assets_label.setFont(QFont("Tahoma", 9))
+        assets_row.addWidget(self.assets_label)
+
+        self.assets_bar = QProgressBar()
+        self.assets_bar.setMinimum(0)
+        self.assets_bar.setMaximum(4)
+        self.assets_bar.setValue(0)
+        self.assets_bar.setTextVisible(True)
+        self.assets_bar.setFormat("%v / 4")
+        self.assets_bar.setFont(QFont("Tahoma", 8))
+        self.assets_bar.setFixedHeight(18)
+        self.assets_bar.setMinimumWidth(140)
+        assets_row.addWidget(self.assets_bar)
+
+        self.assets_detail = QLabel("su · dirtycow · twrp · SuperSU")
+        self.assets_detail.setFont(QFont("Tahoma", 8))
+        self.assets_detail.setStyleSheet("color: #555555;")
+        assets_row.addWidget(self.assets_detail)
+
+        self.btn_add_exploits = QPushButton("Add Exploits")
+        self.btn_add_exploits.setFont(QFont("Tahoma", 8))
+        self.btn_add_exploits.setFixedHeight(24)
+        self.btn_add_exploits.setStyleSheet(
+            "QPushButton { padding: 2px 10px; min-width: 90px; }"
+        )
+        self.btn_add_exploits.clicked.connect(self.add_exploits)
+        assets_row.addWidget(self.btn_add_exploits)
+
+        assets_row.addStretch()
+
+        ver_label = QLabel("Target Version:")
+        ver_label.setFont(QFont("Tahoma", 9))
+        assets_row.addWidget(ver_label)
+
+        self.version_combo = QComboBox()
+        self.version_combo.setFont(QFont("Tahoma", 9))
+        self.version_combo.addItems([
+            "CHOOSE OS",
+            "Android 4.0 – 4.4 (KitKat)",
+            "Android 5.0 – 5.1 (Lollipop)",
+            "Android 6.0 – 6.0.1 (Marshmallow)",
+            "Android 7.0 – 7.1 (Nougat)"
+        ])
+        self.version_combo.setMinimumWidth(200)
+        self.version_combo.currentIndexChanged.connect(self.refresh_assets_status)
+        assets_row.addWidget(self.version_combo)
+
+        main_layout.addLayout(assets_row)
 
         # Button row
         btn_layout = QHBoxLayout()
@@ -498,6 +556,145 @@ class AnvilMainWindow(QMainWindow):
         self.log_view.clear()
         self._log("Logs cleared.")
 
+    def add_exploits(self):
+        """Let the user pick su / dirtycow / TWRP / SuperSU and install them into assets/."""
+        # Map friendly names → destination relative paths
+        targets = {
+            "su binary (ARMv7)": ("exploits", "su"),
+            "Dirty COW (dirtycow)": ("exploits", "dirtycow"),
+            "TWRP image (twrp_generic.img)": ("recoveries", "twrp_generic.img"),
+            "SuperSU.zip": ("recoveries", "SuperSU.zip"),
+        }
+
+        self._log("Select the exploit / recovery files to add...")
+        files, _ = QFileDialog.getOpenFileNames(
+            self,
+            "Add Exploits / Recovery Assets",
+            str(Path.home()),
+            "All files (*.*);;Binaries (su dirtycow);;Images (*.img);;Zips (*.zip)"
+        )
+        if not files:
+            self._log("Add Exploits cancelled.")
+            return
+
+        added = 0
+        for src in files:
+            src_path = Path(src)
+            name_lower = src_path.name.lower()
+
+            # Heuristic match by filename
+            dest_rel = None
+            if name_lower == "su" or name_lower.endswith("/su") or "su-binary" in name_lower:
+                dest_rel = ("exploits", "su")
+            elif "dirtycow" in name_lower or name_lower == "dcow":
+                dest_rel = ("exploits", "dirtycow")
+            elif name_lower.endswith(".img") or "twrp" in name_lower:
+                dest_rel = ("recoveries", "twrp_generic.img")
+            elif name_lower.endswith(".zip") and ("supersu" in name_lower or "su" in name_lower):
+                dest_rel = ("recoveries", "SuperSU.zip")
+            else:
+                # Ask user which slot this file is for
+                from PyQt5.QtWidgets import QInputDialog
+                choice, ok = QInputDialog.getItem(
+                    self,
+                    "What is this file?",
+                    f"Assign '{src_path.name}' to:",
+                    list(targets.keys()),
+                    0,
+                    False
+                )
+                if not ok:
+                    continue
+                dest_rel = targets[choice]
+
+            dest_dir = self.assets / dest_rel[0]
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_path = dest_dir / dest_rel[1]
+
+            try:
+                shutil.copy2(str(src_path), str(dest_path))
+                size_kb = dest_path.stat().st_size // 1024
+                self._log(f"Added: {dest_rel[1]}  ({size_kb} KB) ← {src_path.name}")
+                added += 1
+            except Exception as e:
+                self._log(AnvilExceptionHandler.log_safe(
+                    f"Failed to copy {src_path.name}: {e}", "ERROR"
+                ))
+
+        self.refresh_assets_status()
+        if added:
+            self._log(AnvilExceptionHandler.log_safe(
+                f"Added {added} asset(s). Assets bar updated.", "SUCCESS"
+            ))
+            # Point the engine at the (possibly updated) assets path
+            self.engine = RecoveryScriptEngine(self.adb, self.assets)
+        else:
+            self._log("No assets were added.")
+
+    def refresh_assets_status(self):
+        """Scan assets and update the bar based on selected Target Version."""
+        # What each version actually needs
+        # 4.x / 5.x = system injection → su required, dirtycow optional-but-tracked
+        # 6.x / 7.x = systemless → twrp + SuperSU required
+        # Auto = show all four until device tells us
+        ver = self.version_combo.currentText() if hasattr(self, "version_combo") else "CHOOSE OS"
+
+        if "4.0" in ver or "5.0" in ver:
+            needed = {
+                "su": self.assets / "exploits" / "su",
+                "dirtycow": self.assets / "exploits" / "dirtycow",
+            }
+        elif "6.0" in ver or "7.0" in ver:
+            needed = {
+                "twrp": self.assets / "recoveries" / "twrp_generic.img",
+                "SuperSU": self.assets / "recoveries" / "SuperSU.zip",
+            }
+        else:
+            # CHOOSE OS – show full set until user picks a version
+            needed = {
+                "su": self.assets / "exploits" / "su",
+                "dirtycow": self.assets / "exploits" / "dirtycow",
+                "twrp": self.assets / "recoveries" / "twrp_generic.img",
+                "SuperSU": self.assets / "recoveries" / "SuperSU.zip",
+            }
+
+        present = []
+        missing = []
+        for name, path in needed.items():
+            if path.exists() and path.stat().st_size > 0:
+                present.append(name)
+            else:
+                missing.append(name)
+
+        total = len(needed)
+        count = len(present)
+        self.assets_bar.setMaximum(total)
+        self.assets_bar.setValue(count)
+        self.assets_bar.setFormat(f"{count} / {total}")
+
+        if count == total and total > 0:
+            self.assets_detail.setText("All assets ready")
+            self.assets_detail.setStyleSheet("color: #008000;")
+            self.assets_bar.setStyleSheet("""
+                QProgressBar {
+                    border: 1px solid #7A9BC5;
+                    border-radius: 2px;
+                    text-align: center;
+                    background-color: #FFFFFF;
+                    color: #000000;
+                }
+                QProgressBar::chunk {
+                    background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #90EE90, stop:0.5 #32CD32, stop:1 #228B22);
+                    margin: 1px;
+                }
+            """)
+        else:
+            missing_str = " · ".join(missing) if missing else ""
+            self.assets_detail.setText(f"Missing: {missing_str}" if missing else "—")
+            self.assets_detail.setStyleSheet("color: #CC0000;" if missing else "color: #555555;")
+            self.assets_bar.setStyleSheet("")
+
     def _set_buttons_enabled(self, enabled: bool):
         self.btn_preflight.setEnabled(enabled)
         device_alive = self.adb.check_usb_alive()
@@ -596,6 +793,18 @@ class AnvilMainWindow(QMainWindow):
                 "No device connected. Root aborted.", "ERROR"
             ))
             return
+        self.refresh_assets_status()
+        # Warn if critical assets are missing (still allow attempt)
+        missing = []
+        for name, rel in [("su", "exploits/su"), ("dirtycow", "exploits/dirtycow")]:
+            p = self.assets / rel
+            if not (p.exists() and p.stat().st_size > 0):
+                missing.append(name)
+        if missing:
+            self._log(AnvilExceptionHandler.log_safe(
+                f"Missing assets for root: {', '.join(missing)}. Place real binaries in assets/ first.",
+                "WARN"
+            ))
         self._set_buttons_enabled(False)
         self.worker = RootWorker(self.engine, self.current_report, self.adb)
         self.worker.log.connect(self._log)
@@ -617,6 +826,17 @@ class AnvilMainWindow(QMainWindow):
                 "No device connected. Recovery boot aborted.", "ERROR"
             ))
             return
+        self.refresh_assets_status()
+        missing = []
+        for name, rel in [("twrp", "recoveries/twrp_generic.img"), ("SuperSU", "recoveries/SuperSU.zip")]:
+            p = self.assets / rel
+            if not (p.exists() and p.stat().st_size > 0):
+                missing.append(name)
+        if missing:
+            self._log(AnvilExceptionHandler.log_safe(
+                f"Missing assets for recovery: {', '.join(missing)}. Place real files in assets/recoveries/ first.",
+                "WARN"
+            ))
         self._set_buttons_enabled(False)
         self.worker = RecoveryBootWorker(self.engine, self.adb)
         self.worker.log.connect(self._log)
