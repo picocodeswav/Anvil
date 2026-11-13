@@ -1,5 +1,8 @@
 # Anvil
 
+<img width="545" height="379" alt="image" src="https://github.com/user-attachments/assets/431c3471-dffd-468f-80a0-81657206cfec" />
+
+
 **Keep old Android devices useful instead of throwing them away.**
 
 Anvil is a desktop tool for Android 4.0 (Ice Cream Sandwich) through 7.1 (Nougat).  
