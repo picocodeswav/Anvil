@@ -1,0 +1,72 @@
+{
+  "samsung": [
+    "com.sec.android.app.easylauncher",
+    "com.samsung.vzw.vcast",
+    "com.sec.android.app.sbrowser",
+    "com.samsung.android.app.watchmanager",
+    "com.sec.android.app.popupcalculator",
+    "com.samsung.android.email.provider",
+    "com.sec.android.gallery3d",
+    "com.samsung.android.app.music",
+    "com.sec.android.app.voicenote",
+    "com.samsung.android.calendar",
+    "com.sec.android.app.clockpackage",
+    "com.samsung.android.messaging",
+    "com.sec.android.app.shealth",
+    "com.samsung.android.app.reminder",
+    "com.sec.android.app.music",
+    "com.samsung.android.voc",
+    "com.sec.android.app.kidshome",
+    "com.samsung.android.app.contacts",
+    "com.sec.android.app.camera",
+    "com.samsung.android.app.notes"
+  ],
+  "verizon": [
+    "com.vzw.qualitytracking.dcm",
+    "com.vzw.vms.myverizon",
+    "com.verizon.messaging.vzmsgs",
+    "com.vzw.hss.myverizon",
+    "com.verizon.login",
+    "com.vzw.ecid",
+    "com.verizon.phoneservice",
+    "com.vzw.apnlib",
+    "com.verizon.vzwavs",
+    "com.vzw.hs.android.digitalreward"
+  ],
+  "htc": [
+    "com.htc.launcher",
+    "com.htc.android.htcsetupwizard",
+    "com.htc.sense.ime",
+    "com.htc.android.mail",
+    "com.htc.music",
+    "com.htc.album",
+    "com.htc.calendar",
+    "com.htc.Weather",
+    "com.htc.android.worldclock",
+    "com.htc.sense.hsp"
+  ],
+  "lg": [
+    "com.lge.launcher2",
+    "com.lge.ime",
+    "com.lge.email",
+    "com.lge.music",
+    "com.lge.gallery",
+    "com.lge.calendar",
+    "com.lge.clock",
+    "com.lge.bnr",
+    "com.lge.updatecenter",
+    "com.lge.smartshare"
+  ],
+  "generic": [
+    "com.google.android.apps.maps",
+    "com.google.android.youtube",
+    "com.google.android.apps.docs",
+    "com.google.android.gm",
+    "com.android.chrome",
+    "com.google.android.music",
+    "com.google.android.videos",
+    "com.google.android.apps.plus",
+    "com.google.android.talk",
+    "com.android.vending"
+  ]
+}
