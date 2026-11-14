@@ -1,5 +1,11 @@
 # Anvil Legacy Android Maintenance Utility
 
+[![Discord](https://shields.io)](https://discord.gg/htfkspkGM)
+
+**Official Discord:** [Join the Anvil Community](https://discord.gg/htfkspkGM)
+Use code with caution.
+
+
 Production-grade orchestration engine for Android 4.0 (Ice Cream Sandwich) through 7.1 (Nougat).
 
 Designed for retro-emulation decks, offline smart-home controllers, digital dashboards, and remote field telemetry units.
